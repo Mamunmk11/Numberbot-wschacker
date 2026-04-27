@@ -1,5 +1,3 @@
-const BAILEYS_URL = process.env.BAILEYS_URL || "http://localhost:3000";
-
 /******************** IMPORTS ********************/
 const { Telegraf, session } = require("telegraf");
 const fs = require("fs");
