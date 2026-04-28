@@ -819,8 +819,8 @@ bot.use(async (ctx, next) => {
 
   const verificationMessage = 
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
-    "*Welcome to Update Otp Bot*\n\n" +
-    "🌹 Please Join My All Group & Channel\n\n" +
+    "❤️ *Welcome to Update Otp Bot* ❤️\n\n" +
+    "🌹 *Please Join My All Group & Channel* 🌹\n\n" +
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
     "[ 1️⃣ 📢 Main Channel ]    [ 2️⃣ 🌐 Number Channel ]\n\n" +
     "[ 3️⃣ 📨 OTP Group ]\n\n" +
@@ -877,6 +877,7 @@ function clearUserState(ctx) {
 /******************** SHOW MAIN MENU ********************/
 async function showMainMenu(ctx) {
   try {
+    // Main Menu with WhatsApp Connect button
     await ctx.reply(
       "🏠 *Main Menu*",
       {
@@ -894,6 +895,29 @@ async function showMainMenu(ctx) {
     );
   } catch (error) {
     console.error("Error showing main menu:", error);
+  }
+}
+
+// Update main menu when WhatsApp is connected
+async function updateMainMenuForWA(ctx, isConnected) {
+  try {
+    const menuButtons = [
+      ["☎️ Get Number", "📧 Get Tempmail"],
+      ["🔐 2FA", "💬 Support"]
+    ];
+    
+    if (isConnected) {
+      menuButtons.push(["📊 WA Status", "🔴 Disconnect WA"]);
+    } else {
+      menuButtons.push(["📱 Connect WhatsApp"]);
+    }
+    
+    await ctx.reply("🏠 *Main Menu*", {
+      parse_mode: "Markdown",
+      reply_markup: { keyboard: menuButtons, resize_keyboard: true }
+    });
+  } catch (error) {
+    console.error("Error updating main menu:", error);
   }
 }
 
@@ -918,11 +942,10 @@ bot.start(async (ctx) => {
     ctx.session.adminData = null;
     ctx.session.isAdmin = isAdmin(ctx.from.id.toString());
 
-    // Reply keyboard will be shown from the start
     const welcomeMessage = 
       "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
-      "*Welcome to Update Otp Bot*\n\n" +
-      "🌹 Please Join My All Group & Channel\n\n" +
+      "❤️ *Welcome to Update Otp Bot* ❤️\n\n" +
+      "🌹 *Please Join My All Group & Channel* 🌹\n\n" +
       "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
       "[ 1️⃣ 📢 Main Channel ]    [ 2️⃣ 🌐 Number Channel ]\n\n" +
       "[ 3️⃣ 📨 OTP Group ]\n\n" +
@@ -1034,12 +1057,17 @@ bot.command("myid", async (ctx) => {
 bot.action("goto_main_menu", async (ctx) => {
   await ctx.answerCbQuery();
   clearUserState(ctx);
-  await showMainMenu(ctx);
+  
+  const userId = ctx.from.id.toString();
+  const waConnected = waSessions[userId]?.connected || false;
+  await updateMainMenuForWA(ctx, waConnected);
 });
 
 bot.hears(["🏠 Home", "🏠 Main Menu"], async (ctx) => {
   clearUserState(ctx);
-  await showMainMenu(ctx);
+  const userId = ctx.from.id.toString();
+  const waConnected = waSessions[userId]?.connected || false;
+  await updateMainMenuForWA(ctx, waConnected);
 });
 
 /******************** GET NUMBERS ********************/
@@ -1198,14 +1226,13 @@ bot.action(/^select_country:(.+):(.+)$/, async (ctx) => {
       numberButtons.push([{ text: `+${num}${statusIcon}`, copy_text: { text: `+${num}` } }]);
     }
     
-    // Add control buttons
+    // Add control buttons (NOTE: Connect WhatsApp button REMOVED from here as requested)
     numberButtons.push([{ text: "🔄 Change Number", callback_data: `get_new_numbers:${serviceId}:${countryCode}` }]);
     numberButtons.push([{ text: "🌍 Change Country", callback_data: "back_to_services" }]);
     numberButtons.push([{ text: "📨 OTP Group", url: OTP_GROUP }]);
     
-    if (!waConnected) {
-      numberButtons.push([{ text: "📱 Connect WhatsApp", callback_data: "wa_connect" }]);
-    } else {
+    // Only show WA Status and Disconnect if connected (not the Connect button)
+    if (waConnected) {
       numberButtons.push([{ text: "📊 WA Status", callback_data: "wa_status" }]);
       numberButtons.push([{ text: "🔴 Disconnect WA", callback_data: "wa_disconnect" }]);
     }
@@ -1324,9 +1351,7 @@ bot.action(/^get_new_numbers:(.+):(.+)$/, async (ctx) => {
     numberButtons.push([{ text: "🌍 Change Country", callback_data: "back_to_services" }]);
     numberButtons.push([{ text: "📨 OTP Group", url: OTP_GROUP }]);
     
-    if (!waConnected) {
-      numberButtons.push([{ text: "📱 Connect WhatsApp", callback_data: "wa_connect" }]);
-    } else {
+    if (waConnected) {
       numberButtons.push([{ text: "📊 WA Status", callback_data: "wa_status" }]);
       numberButtons.push([{ text: "🔴 Disconnect WA", callback_data: "wa_disconnect" }]);
     }
@@ -1501,6 +1526,32 @@ bot.hears("📱 Connect WhatsApp", async (ctx) => {
       }
     }
   );
+});
+
+bot.hears("📊 WA Status", async (ctx) => {
+  const userId = ctx.from.id.toString();
+  let connected = false;
+  try { 
+    const result = await baileysRequest("GET", `/status?userId=${userId}`); 
+    connected = result?.connected === true; 
+  } catch(e) {}
+  if (!connected && waSessions[userId]) delete waSessions[userId];
+  
+  if (connected) {
+    await updateMainMenuForWA(ctx, true);
+    await ctx.reply("✅ *WhatsApp Connected!*", { parse_mode: "Markdown" });
+  } else {
+    await updateMainMenuForWA(ctx, false);
+    await ctx.reply("❌ *WhatsApp Not Connected!*", { parse_mode: "Markdown" });
+  }
+});
+
+bot.hears("🔴 Disconnect WA", async (ctx) => {
+  const userId = ctx.from.id.toString();
+  await baileysRequest("POST", "/disconnect", { userId });
+  delete waSessions[userId];
+  await updateMainMenuForWA(ctx, false);
+  await ctx.reply("🔴 *WhatsApp Disconnected!*", { parse_mode: "Markdown" });
 });
 
 bot.action("wa_cancel", async (ctx) => {
@@ -3003,6 +3054,8 @@ bot.on("text", async (ctx, next) => {
       "🔐 2FA", "🔐 2FA Codes",
       "💬 Support",
       "📱 Connect WhatsApp",
+      "📊 WA Status",
+      "🔴 Disconnect WA",
       "🏠 Home", "🏠 Main Menu"
     ];
 
